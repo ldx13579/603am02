@@ -1,11 +1,11 @@
-from collections import defaultdict
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
+from app.dependencies import cache_service
 from app.models import CommitRecord, FileModStat, Repo
-from app.schemas import CommitFrequencyResponse, FileModStatResponse, KeywordStatResponse
+from app.schemas import FileModStatResponse, KeywordStatResponse
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -16,13 +16,26 @@ def get_file_extension_stats(repo_id: int, db: Session = Depends(get_db)):
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
+    cache_key = f"file_ext_stats:{repo_id}"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+
     stats = (
         db.query(FileModStat)
         .filter(FileModStat.repo_id == repo_id)
         .order_by(FileModStat.modification_count.desc())
         .all()
     )
-    return stats
+
+    result = [
+        {"extension": s.extension, "file_count": s.file_count, "modification_count": s.modification_count}
+        for s in stats
+    ]
+
+    settings = get_settings()
+    cache_service.set(cache_key, result, ttl=settings.STATS_CACHE_TTL_SECONDS)
+    return result
 
 
 @router.get("/{repo_id}/keywords", response_model=list[KeywordStatResponse])
@@ -35,11 +48,15 @@ def get_keyword_stats(
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
+    cache_key = f"keyword_stats:{repo_id}:{top_n}"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+
     commits = db.query(CommitRecord).filter(CommitRecord.repo_id == repo_id).all()
     if not commits:
         return []
 
-    from dataclasses import dataclass, field
     from app.services.git_analyzer import CommitInfo
     from app.services.smart_analysis import extract_keywords_tfidf, WordCloudConfig
 
@@ -57,4 +74,8 @@ def get_keyword_stats(
     ]
 
     keywords = extract_keywords_tfidf(commit_infos, WordCloudConfig(), top_n=top_n)
-    return [KeywordStatResponse(keyword=kw, score=round(score, 4)) for kw, score in keywords]
+    result = [{"keyword": kw, "score": round(score, 4)} for kw, score in keywords]
+
+    settings = get_settings()
+    cache_service.set(cache_key, result, ttl=settings.STATS_CACHE_TTL_SECONDS)
+    return result

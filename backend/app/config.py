@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     GIT_CLONE_DIR: str = "/app/cloned_repos"
     SCAN_TIMEOUT_SECONDS: int = 600
     MAX_COMMITS: int = 50000
+
+    CLONE_MAX_RETRIES: int = 3
+    CLONE_RETRY_BACKOFF: int = 60
+
+    STATS_CACHE_TTL_SECONDS: int = 600
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     API_KEYS: str = "changeme-secret-key"

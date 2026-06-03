@@ -1,12 +1,21 @@
-import { useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import type { CommitFrequency } from '../../types';
 
+export type Granularity = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
 interface Props {
   data: CommitFrequency[];
-  granularity: 'daily' | 'weekly' | 'monthly';
-  onGranularityChange: (g: 'daily' | 'weekly' | 'monthly') => void;
+  granularity: Granularity;
+  onGranularityChange: (g: Granularity) => void;
 }
+
+const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'yearly', label: 'Yearly' },
+];
 
 export default function CommitFrequencyChart({ data, granularity, onGranularityChange }: Props) {
   const option = {
@@ -39,23 +48,22 @@ export default function CommitFrequencyChart({ data, granularity, onGranularityC
 
   return (
     <div>
-      <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
-        {(['daily', 'weekly', 'monthly'] as const).map(g => (
+      <div style={{ marginBottom: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {GRANULARITY_OPTIONS.map(({ value, label }) => (
           <button
-            key={g}
-            className={`btn btn-small ${g === granularity ? 'active' : ''}`}
-            onClick={() => onGranularityChange(g)}
+            key={value}
+            onClick={() => onGranularityChange(value)}
             style={{
               padding: '4px 12px',
               borderRadius: 4,
               border: '1px solid #ddd',
-              background: g === granularity ? '#4078c0' : '#fff',
-              color: g === granularity ? '#fff' : '#333',
+              background: value === granularity ? '#4078c0' : '#fff',
+              color: value === granularity ? '#fff' : '#333',
               cursor: 'pointer',
               fontSize: 12,
             }}
           >
-            {g.charAt(0).toUpperCase() + g.slice(1)}
+            {label}
           </button>
         ))}
       </div>

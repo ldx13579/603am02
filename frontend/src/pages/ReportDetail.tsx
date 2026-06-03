@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { getReport, getFileExtensionStats, getKeywordStats, getCommitFrequency } from '../api/analysis';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import CommitHeatmap from '../components/charts/CommitHeatmap';
 import DailyBarChart from '../components/charts/DailyBarChart';
 import WeeklyLineChart from '../components/charts/WeeklyLineChart';
 import CodeChurnChart from '../components/charts/CodeChurnChart';
 import CommitFrequencyChart from '../components/charts/CommitFrequencyChart';
+import type { Granularity } from '../components/charts/CommitFrequencyChart';
 import FileModPieChart from '../components/charts/FileModPieChart';
 import KeywordRadarChart from '../components/charts/KeywordRadarChart';
 import type { AnalysisReport, CommitFrequency, FileModStat, KeywordStat } from '../types';
@@ -16,26 +18,35 @@ export default function ReportDetail() {
   const [fileStats, setFileStats] = useState<FileModStat[]>([]);
   const [keywords, setKeywords] = useState<KeywordStat[]>([]);
   const [frequency, setFrequency] = useState<CommitFrequency[]>([]);
-  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [granularity, setGranularity] = useState<Granularity>('weekly');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     if (!repoId) return;
     const id = parseInt(repoId);
     loadReport(id);
     loadExtras(id);
+    loadFrequency(id, granularity);
+  }, [repoId, granularity]);
+
+  useEffect(() => {
+    loadAll();
   }, [repoId]);
 
   useEffect(() => {
     if (!repoId) return;
-    getCommitFrequency(parseInt(repoId), granularity).then(setFrequency).catch(() => {});
+    loadFrequency(parseInt(repoId), granularity);
   }, [repoId, granularity]);
+
+  useAutoRefresh(loadAll, { intervalMs: 30000, enabled: !!report });
 
   const loadReport = async (id: number) => {
     try {
       const data = await getReport(id);
       setReport(data);
+      setLastUpdated(new Date());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load report';
       setError(message);
@@ -53,6 +64,11 @@ export default function ReportDetail() {
     setKeywords(kw);
   };
 
+  const loadFrequency = async (id: number, g: Granularity) => {
+    const data = await getCommitFrequency(id, g).catch(() => []);
+    setFrequency(data);
+  };
+
   if (loading) return <div className="loading">Loading report...</div>;
   if (error) return <div className="error">{error}</div>;
   if (!report) return <div className="error">No report data available</div>;
@@ -64,6 +80,11 @@ export default function ReportDetail() {
         <div className="report-meta">
           <span>Total Commits: {report.total_commits}</span>
           <span>Date Range: {report.date_range[0]} ~ {report.date_range[1]}</span>
+          {lastUpdated && (
+            <span style={{ fontSize: 12, opacity: 0.6 }}>
+              Updated: {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
         </div>
       </div>
 

@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAggregateStats, triggerAnalysis } from '../api/analysis';
 import { listRepos } from '../api/repos';
 import { usePolling } from '../hooks/usePolling';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import CommitHeatmap from '../components/charts/CommitHeatmap';
 import DailyBarChart from '../components/charts/DailyBarChart';
 import WeeklyLineChart from '../components/charts/WeeklyLineChart';
 import CommitFrequencyChart from '../components/charts/CommitFrequencyChart';
+import type { Granularity } from '../components/charts/CommitFrequencyChart';
 import type { CommitFrequency, DailyStat, Repo } from '../types';
 
 export default function Dashboard() {
@@ -14,23 +16,12 @@ export default function Dashboard() {
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+  const [granularity, setGranularity] = useState<Granularity>('weekly');
   const navigate = useNavigate();
 
   const taskStatus = usePolling(taskId);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    if (taskStatus?.status === 'SUCCESS') {
-      setTaskId(null);
-      loadData();
-    }
-  }, [taskStatus]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [repoList, stats] = await Promise.all([listRepos(), getAggregateStats()]);
       setRepos(repoList);
@@ -40,7 +31,20 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    if (taskStatus?.status === 'SUCCESS') {
+      setTaskId(null);
+      loadData();
+    }
+  }, [taskStatus, loadData]);
+
+  useAutoRefresh(loadData, { intervalMs: 30000, enabled: !loading && !taskId });
 
   const handleRunAnalysis = async () => {
     try {
@@ -67,13 +71,18 @@ export default function Dashboard() {
     const grouped: Record<string, CommitFrequency> = {};
     for (const d of dailyStats) {
       let key: string;
+      const dt = new Date(d.date);
       if (granularity === 'weekly') {
-        const dt = new Date(d.date);
         const year = dt.getFullYear();
         const week = Math.ceil(((dt.getTime() - new Date(year, 0, 1).getTime()) / 86400000 + 1) / 7);
         key = `${year}-W${String(week).padStart(2, '0')}`;
-      } else {
+      } else if (granularity === 'monthly') {
         key = d.date.slice(0, 7);
+      } else if (granularity === 'quarterly') {
+        const quarter = Math.ceil((dt.getMonth() + 1) / 3);
+        key = `${dt.getFullYear()}-Q${quarter}`;
+      } else {
+        key = String(dt.getFullYear());
       }
       if (!grouped[key]) {
         grouped[key] = { period: key, commit_count: 0, insertions: 0, deletions: 0, files_changed: 0 };

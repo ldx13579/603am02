@@ -108,6 +108,8 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
 
         from app.dependencies import cache_service
         cache_service.invalidate("aggregate_stats:*")
+        cache_service.invalidate(f"file_ext_stats:{repo_id}")
+        cache_service.invalidate(f"keyword_stats:{repo_id}:*")
 
         return {
             "repo_id": repo_id,

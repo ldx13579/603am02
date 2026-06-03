@@ -48,7 +48,7 @@ export async function getKeywordStats(repoId: number, topN: number = 20): Promis
 
 export async function getCommitFrequency(
   repoId: number,
-  granularity: 'daily' | 'weekly' | 'monthly' = 'weekly',
+  granularity: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' = 'weekly',
   since?: string,
   until?: string,
 ): Promise<CommitFrequency[]> {

@@ -168,7 +168,7 @@ def get_aggregate_stats(
 @router.get("/reports/{repo_id}/frequency", response_model=list[CommitFrequencyResponse])
 def get_commit_frequency(
     repo_id: int,
-    granularity: str = Query(default="weekly", regex="^(daily|weekly|monthly)$"),
+    granularity: str = Query(default="weekly", regex="^(daily|weekly|monthly|quarterly|yearly)$"),
     since: str | None = None,
     until: str | None = None,
     db: Session = Depends(get_db),
@@ -200,12 +200,17 @@ def get_commit_frequency(
     grouped = defaultdict(lambda: {"commit_count": 0, "insertions": 0, "deletions": 0, "files_changed": 0})
 
     for s in stats:
+        from datetime import date as date_type
+        d = date_type.fromisoformat(s.date)
         if granularity == "weekly":
-            from datetime import date as date_type
-            d = date_type.fromisoformat(s.date)
             key = f"{d.isocalendar()[0]}-W{d.isocalendar()[1]:02d}"
-        else:
+        elif granularity == "monthly":
             key = s.date[:7]
+        elif granularity == "quarterly":
+            quarter = (d.month - 1) // 3 + 1
+            key = f"{d.year}-Q{quarter}"
+        else:
+            key = str(d.year)
         grouped[key]["commit_count"] += s.commit_count
         grouped[key]["insertions"] += s.total_insertions
         grouped[key]["deletions"] += s.total_deletions
