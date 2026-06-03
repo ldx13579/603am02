@@ -23,11 +23,14 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///./data/analysis.db
       - REPOS_YAML_PATH=/app/repos.yaml
-      - API_KEY=${API_KEY:-changeme-secret-key}
+      - API_KEYS=${API_KEYS:-changeme-secret-key}
+      - TRUSTED_PROXY_HEADERS=${TRUSTED_PROXY_HEADERS:-["X-Forwarded-For","X-Real-IP"]}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-["127.0.0.1","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]}
       - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-60}
       - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
       - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-300}
       - DB_BACKUP_DIR=/app/data/backups
+      - DB_BACKUP_WAIT_TIMEOUT=${DB_BACKUP_WAIT_TIMEOUT:-300}
     volumes:
       - backend_data:/app/data
       - ${REPOS_MOUNT_PATH:-./backend/repos.yaml.example}:/app/repos.yaml:ro

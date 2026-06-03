@@ -1,4 +1,5 @@
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -112,6 +113,32 @@ def scan_all_repos(self, repo_ids: list[int], since: str | None = None, until: s
 @celery_app.task(name="backup_database")
 def backup_database():
     settings = get_settings()
+
+    db = SessionLocal()
+    try:
+        timeout = settings.DB_BACKUP_WAIT_TIMEOUT
+        poll_interval = 5
+        elapsed = 0
+
+        while elapsed < timeout:
+            running = (
+                db.query(AnalysisRun)
+                .filter(AnalysisRun.status.in_(["pending", "running"]))
+                .count()
+            )
+            if running == 0:
+                break
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+            db.expire_all()
+
+        if elapsed >= timeout:
+            return {
+                "status": "skipped",
+                "reason": f"Timed out waiting for {running} running tasks after {timeout}s",
+            }
+    finally:
+        db.close()
 
     db_url = settings.DATABASE_URL
     db_path = db_url.replace("sqlite:///", "")
