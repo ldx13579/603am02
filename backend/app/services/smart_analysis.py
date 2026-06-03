@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -10,14 +11,14 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, ListedColormap
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
 
 from app.services.git_analyzer import CommitInfo
 
 
-COMMIT_STOPWORDS = {
+COMMIT_STOPWORDS_EN = {
     "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did", "will", "would", "could",
     "should", "may", "might", "shall", "can", "need", "dare", "ought",
@@ -38,6 +39,26 @@ COMMIT_STOPWORDS = {
     "instead", "since", "still", "already", "yet", "much", "many",
 }
 
+COMMIT_STOPWORDS_ZH = {
+    "的", "了", "和", "是", "在", "有", "不", "这", "那", "就",
+    "也", "都", "要", "会", "对", "为", "与", "或", "及", "等",
+    "把", "被", "让", "给", "从", "到", "上", "下", "中", "里",
+    "但", "而", "又", "所", "以", "因", "如", "则", "已", "于",
+    "着", "过", "吗", "呢", "吧", "啊", "哦", "嗯", "呀", "哈",
+    "个", "些", "每", "各", "某", "该", "其", "此", "之", "者",
+    "来", "去", "出", "进", "做", "用", "可", "能", "将", "还",
+    "很", "更", "最", "比", "太", "非常", "十分", "特别", "相当",
+    "一个", "一些", "一下", "这个", "那个", "什么", "怎么", "如何",
+    "我们", "他们", "它们", "你们", "自己", "大家", "所有", "没有",
+    "可以", "需要", "应该", "必须", "已经", "正在", "通过", "进行",
+    "然后", "但是", "因为", "所以", "如果", "虽然", "不过", "而且",
+    "或者", "以及", "关于", "按照", "根据", "由于", "对于", "除了",
+    "提交", "修改", "代码", "文件", "功能", "问题", "处理", "完成",
+    "实现", "优化", "调整", "增加", "删除", "更新", "修复", "添加",
+}
+
+COMMIT_STOPWORDS = COMMIT_STOPWORDS_EN | COMMIT_STOPWORDS_ZH
+
 HEATMAP_COLOR_SCHEMES = {
     "github": ["#ebedf0", "#9be9a8", "#40c463", "#30a14e", "#216e39"],
     "ocean": ["#f7fbff", "#c6dbef", "#6baed6", "#2171b5", "#08306b"],
@@ -53,6 +74,7 @@ class WordCloudConfig:
     min_font_size: int = 10
     max_words: int = 100
     colormap: str = "viridis"
+    color_list: list[str] = field(default_factory=list)
     background_color: str = "white"
     width: int = 1200
     height: int = 600
@@ -64,12 +86,31 @@ class WordCloudConfig:
 class SmartAnalysisConfig:
     late_night_start: int = 23
     late_night_end: int = 5
+    timezone: str = ""
     heatmap_scheme: str = "github"
     wordcloud: WordCloudConfig = field(default_factory=WordCloudConfig)
 
     def __post_init__(self):
         if isinstance(self.wordcloud, dict):
             self.wordcloud = WordCloudConfig(**self.wordcloud)
+
+    def get_tz(self) -> timezone | None:
+        if not self.timezone:
+            return None
+        tz_str = self.timezone.strip()
+        if tz_str.upper() == "UTC":
+            return timezone.utc
+        match = re.match(r"^UTC([+-])(\d{1,2})(?::(\d{2}))?$", tz_str, re.IGNORECASE)
+        if match:
+            sign = 1 if match.group(1) == "+" else -1
+            hours = int(match.group(2))
+            minutes = int(match.group(3)) if match.group(3) else 0
+            return timezone(timedelta(hours=sign * hours, minutes=sign * minutes))
+        try:
+            import zoneinfo
+            return zoneinfo.ZoneInfo(tz_str)
+        except (ImportError, KeyError):
+            return None
 
 
 def load_analysis_config(raw: dict | None) -> SmartAnalysisConfig:
@@ -82,9 +123,19 @@ def load_analysis_config(raw: dict | None) -> SmartAnalysisConfig:
     return SmartAnalysisConfig(
         late_night_start=raw.get("late_night_start", 23),
         late_night_end=raw.get("late_night_end", 5),
+        timezone=raw.get("timezone", ""),
         heatmap_scheme=raw.get("heatmap_scheme", "github"),
         wordcloud=wc_config,
     )
+
+
+def _get_local_hour(commit: CommitInfo, config: SmartAnalysisConfig) -> tuple[int, int]:
+    tz = config.get_tz()
+    if tz is None:
+        return commit.timestamp.weekday(), commit.timestamp.hour
+    utc_dt = commit.timestamp.replace(tzinfo=timezone.utc)
+    local_dt = utc_dt.astimezone(tz)
+    return local_dt.weekday(), local_dt.hour
 
 
 def _is_late_night(hour: int, start: int, end: int) -> bool:
@@ -97,6 +148,18 @@ def _get_stopwords(config: WordCloudConfig) -> set[str]:
     stopwords = COMMIT_STOPWORDS.copy()
     stopwords.update(w.lower() for w in config.custom_stopwords)
     return stopwords
+
+
+def _build_color_func(color_list: list[str]):
+    import random
+    colors = [c.strip() for c in color_list if c.strip()]
+    if not colors:
+        return None
+
+    def color_func(word, font_size, position, orientation, random_state=None, **kwargs):
+        return random.choice(colors)
+
+    return color_func
 
 
 def _preprocess_messages(commits: list[CommitInfo]) -> list[str]:
@@ -160,17 +223,25 @@ def generate_wordcloud(
 
     freq_dict = {word: score for word, score in keywords}
 
-    wc = WordCloud(
+    color_func = _build_color_func(config.color_list)
+
+    wc_kwargs = dict(
         width=config.width,
         height=config.height,
         max_font_size=config.max_font_size,
         min_font_size=config.min_font_size,
         max_words=config.max_words,
         background_color=config.background_color,
-        colormap=config.colormap,
         relative_scaling=0.5,
         prefer_horizontal=config.prefer_horizontal,
     )
+
+    if color_func:
+        wc_kwargs["color_func"] = color_func
+    else:
+        wc_kwargs["colormap"] = config.colormap
+
+    wc = WordCloud(**wc_kwargs)
     wc.generate_from_frequencies(freq_dict)
 
     fig, ax = plt.subplots(figsize=(config.width / 100, config.height / 100))
@@ -186,16 +257,19 @@ def generate_wordcloud(
 
 def compute_late_night_ratio(commits: list[CommitInfo], config: SmartAnalysisConfig) -> dict:
     if not commits:
-        return {"total": 0, "late_night_count": 0, "ratio": 0.0, "period": "N/A"}
+        return {"total": 0, "late_night_count": 0, "ratio": 0.0, "period": "N/A", "timezone": config.timezone or "local"}
 
     start, end = config.late_night_start, config.late_night_end
-    late_count = sum(1 for c in commits if _is_late_night(c.timestamp.hour, start, end))
+    late_count = sum(
+        1 for c in commits if _is_late_night(_get_local_hour(c, config)[1], start, end)
+    )
 
     return {
         "total": len(commits),
         "late_night_count": late_count,
         "ratio": round(late_count / len(commits), 4),
         "period": f"{start:02d}:00-{end:02d}:00",
+        "timezone": config.timezone or "local",
     }
 
 
@@ -205,8 +279,9 @@ def compute_author_late_night(commits: list[CommitInfo], config: SmartAnalysisCo
 
     for c in commits:
         author = c.author
+        _, hour = _get_local_hour(c, config)
         author_stats[author]["total"] += 1
-        if _is_late_night(c.timestamp.hour, start, end):
+        if _is_late_night(hour, start, end):
             author_stats[author]["late_night"] += 1
 
     result = {}
@@ -218,12 +293,11 @@ def compute_author_late_night(commits: list[CommitInfo], config: SmartAnalysisCo
     return result
 
 
-def compute_schedule_heatmap_data(commits: list[CommitInfo]) -> np.ndarray:
+def compute_schedule_heatmap_data(commits: list[CommitInfo], config: SmartAnalysisConfig) -> np.ndarray:
     heatmap = np.zeros((7, 24), dtype=int)
 
     for c in commits:
-        weekday = c.timestamp.weekday()
-        hour = c.timestamp.hour
+        weekday, hour = _get_local_hour(c, config)
         heatmap[weekday][hour] += 1
 
     return heatmap
@@ -234,7 +308,7 @@ def generate_schedule_heatmap(
     output_path: Path,
     config: SmartAnalysisConfig,
 ) -> Path:
-    heatmap_data = compute_schedule_heatmap_data(commits)
+    heatmap_data = compute_schedule_heatmap_data(commits, config)
 
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     hours = [f"{h:02d}:00" for h in range(24)]
@@ -262,7 +336,8 @@ def generate_schedule_heatmap(
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("Commit Count", fontsize=10)
 
-    ax.set_title("Team Schedule Heatmap (Commits by Day & Hour)", fontsize=13, pad=12)
+    tz_label = f" (TZ: {config.timezone})" if config.timezone else ""
+    ax.set_title(f"Team Schedule Heatmap (Commits by Day & Hour){tz_label}", fontsize=13, pad=12)
     ax.set_xlabel("Hour of Day", fontsize=10)
     ax.set_ylabel("Day of Week", fontsize=10)
 
@@ -306,7 +381,7 @@ def run_smart_analysis(
     return {
         "keywords": keywords[:30],
         "late_night": late_night_stats,
-        "heatmap_data": compute_schedule_heatmap_data(commits).tolist(),
+        "heatmap_data": compute_schedule_heatmap_data(commits, config).tolist(),
         "output_files": {
             "wordcloud": str(wordcloud_path),
             "heatmap": str(heatmap_path),

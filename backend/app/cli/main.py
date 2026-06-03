@@ -233,14 +233,17 @@ def smart_analyze(
     console.print(table)
 
     late = result["late_night"]
-    console.print(f"\n[bold]Late-night commits ({late['period']}):[/bold]")
+    tz_display = late.get("timezone", "local")
+    console.print(f"\n[bold]Late-night commits ({late['period']}, timezone: {tz_display}):[/bold]")
     console.print(f"  Total commits: {late['total']}")
     console.print(f"  Late-night commits: {late['late_night_count']}")
     console.print(f"  Ratio: [{'red' if late['ratio'] > 0.3 else 'green'}]{late['ratio']:.1%}[/]")
 
     console.print(f"\n[bold]Config:[/bold]")
+    console.print(f"  Timezone: {tz_display}")
     console.print(f"  Heatmap scheme: {analysis_cfg.heatmap_scheme}")
-    console.print(f"  Word cloud colormap: {analysis_cfg.wordcloud.colormap}")
+    color_mode = "custom hex colors" if analysis_cfg.wordcloud.color_list else analysis_cfg.wordcloud.colormap
+    console.print(f"  Word cloud colors: {color_mode}")
     console.print(f"  Late-night period: {late['period']}")
 
     console.print(f"\n[bold]Output files:[/bold]")

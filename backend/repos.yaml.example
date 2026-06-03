@@ -8,6 +8,11 @@ repos:
 
 # Smart analysis configuration (all fields optional, shown with defaults)
 smart_analysis:
+  # Timezone for late-night and heatmap calculation
+  # Supports: "UTC", "UTC+8", "UTC-5", "Asia/Shanghai", "America/New_York", etc.
+  # Leave empty to use commit's local timestamp as-is
+  timezone: "Asia/Shanghai"
+
   # Late-night time window (hour of day, 24h format)
   # Default: 23:00 to 05:00 next day
   late_night_start: 23
@@ -25,9 +30,17 @@ smart_analysis:
     height: 600
     # Matplotlib colormap: viridis | plasma | inferno | magma | cividis | coolwarm | Set2 | tab10
     colormap: "viridis"
+    # Custom hex color list (overrides colormap when provided)
+    # Words will be randomly colored from this list
+    color_list:
+      # - "#1a73e8"
+      # - "#e8710a"
+      # - "#0d652d"
+      # - "#c5221f"
+      # - "#9334e6"
     background_color: "white"
     prefer_horizontal: 0.7
-    # Additional stopwords to filter out (beyond built-in list)
+    # Additional stopwords to filter out (beyond built-in English + Chinese list)
     custom_stopwords:
-      - "internal_tool_name"
-      - "project_prefix"
+      # - "internal_tool_name"
+      # - "project_prefix"
