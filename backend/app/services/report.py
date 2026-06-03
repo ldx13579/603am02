@@ -42,6 +42,7 @@ def generate_report(
             {
                 "hash": c.hash,
                 "timestamp": c.timestamp.isoformat(),
+                "author": c.author,
                 "message": c.message,
                 "files_changed": c.files_changed,
                 "insertions": c.insertions,

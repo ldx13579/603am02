@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class CommitInfo:
     hash: str
     timestamp: datetime
+    author: str
     message: str
     files_changed: int
     insertions: int
@@ -85,6 +86,7 @@ def analyze_repo(
             info = CommitInfo(
                 hash=commit.hexsha[:8],
                 timestamp=datetime.fromtimestamp(commit.committed_date),
+                author=str(commit.author),
                 message=safe_message(commit),
                 files_changed=stats.get("files", 0),
                 insertions=stats.get("insertions", 0),
