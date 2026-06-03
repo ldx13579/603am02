@@ -5,3 +5,29 @@ repos:
   - name: "another-project"
     path: "/path/to/another-project"
     branch: "develop"
+
+# Smart analysis configuration (all fields optional, shown with defaults)
+smart_analysis:
+  # Late-night time window (hour of day, 24h format)
+  # Default: 23:00 to 05:00 next day
+  late_night_start: 23
+  late_night_end: 5
+
+  # Heatmap color scheme: github | ocean | fire | purple | warm
+  heatmap_scheme: "github"
+
+  # Word cloud styling
+  wordcloud:
+    max_font_size: 80
+    min_font_size: 10
+    max_words: 100
+    width: 1200
+    height: 600
+    # Matplotlib colormap: viridis | plasma | inferno | magma | cividis | coolwarm | Set2 | tab10
+    colormap: "viridis"
+    background_color: "white"
+    prefer_horizontal: 0.7
+    # Additional stopwords to filter out (beyond built-in list)
+    custom_stopwords:
+      - "internal_tool_name"
+      - "project_prefix"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -13,7 +12,7 @@ from rich.table import Table
 
 from app.services.report import generate_report
 from app.services.git_analyzer import analyze_repo, CommitInfo
-from app.services.smart_analysis import run_smart_analysis
+from app.services.smart_analysis import run_smart_analysis, load_analysis_config, HEATMAP_COLOR_SCHEMES
 
 app = typer.Typer(name="git-habits", help="Cross-repository Git commit habit analysis CLI")
 console = Console()
@@ -34,6 +33,18 @@ def load_repos_config(config_path: str) -> list[dict]:
         raise typer.Exit(1)
 
     return repos
+
+
+def _load_full_config(config_path: str) -> dict:
+    path = Path(config_path)
+    if not path.exists():
+        console.print(f"[red]Config file not found: {config_path}[/red]")
+        raise typer.Exit(1)
+
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+
+    return data or {}
 
 
 @app.command()
@@ -145,7 +156,13 @@ def smart_analyze(
     output_dir: str = typer.Option("./output", "--output-dir", "-d", help="Directory for output images"),
 ):
     """Smart analysis: TF-IDF keywords, word cloud, late-night ratio, and schedule heatmap."""
-    repos = load_repos_config(config)
+    repos_data = _load_full_config(config)
+    repos = repos_data.get("repos", [])
+    if not repos:
+        console.print("[yellow]No repositories configured in YAML[/yellow]")
+        raise typer.Exit(1)
+
+    analysis_cfg = load_analysis_config(repos_data.get("smart_analysis"))
 
     since_dt = datetime.strptime(since, "%Y-%m-%d") if since else None
     until_dt = datetime.strptime(until, "%Y-%m-%d") if until else None
@@ -190,11 +207,24 @@ def smart_analyze(
         raise typer.Exit(1)
 
     console.print(f"\n[bold]Merged {len(all_commits)} commits from {len(repos)} repo(s)[/bold]")
-    console.print("[dim]Running smart analysis...[/dim]\n")
 
-    out_path = Path(output_dir)
-    result = run_smart_analysis(all_commits, out_path)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console,
+    ) as progress:
+        analysis_task = progress.add_task("Analyzing...", total=4)
 
+        def on_analysis_progress(step: int, total: int, description: str):
+            progress.update(analysis_task, completed=step, total=total, description=description)
+
+        out_path = Path(output_dir)
+        result = run_smart_analysis(all_commits, out_path, analysis_cfg, on_analysis_progress)
+        progress.update(analysis_task, completed=4, description="[green]Analysis complete[/green]")
+
+    console.print()
     table = Table(title="Top Keywords (TF-IDF)")
     table.add_column("Keyword", style="cyan")
     table.add_column("Score", justify="right", style="green")
@@ -203,10 +233,15 @@ def smart_analyze(
     console.print(table)
 
     late = result["late_night"]
-    console.print(f"\n[bold]Late-night commits (23:00-05:00):[/bold]")
+    console.print(f"\n[bold]Late-night commits ({late['period']}):[/bold]")
     console.print(f"  Total commits: {late['total']}")
     console.print(f"  Late-night commits: {late['late_night_count']}")
     console.print(f"  Ratio: [{'red' if late['ratio'] > 0.3 else 'green'}]{late['ratio']:.1%}[/]")
+
+    console.print(f"\n[bold]Config:[/bold]")
+    console.print(f"  Heatmap scheme: {analysis_cfg.heatmap_scheme}")
+    console.print(f"  Word cloud colormap: {analysis_cfg.wordcloud.colormap}")
+    console.print(f"  Late-night period: {late['period']}")
 
     console.print(f"\n[bold]Output files:[/bold]")
     for name, path in result["output_files"].items():
