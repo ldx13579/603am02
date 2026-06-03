@@ -1,14 +1,42 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
+_last_alert_times: dict[str, datetime] = {}
 
-def send_dingtalk_alert(webhook_url: str, violations: list, repo_name: str) -> bool:
+
+def is_silenced(repo_name: str, silence_minutes: int) -> bool:
+    if silence_minutes <= 0:
+        return False
+    last_time = _last_alert_times.get(repo_name)
+    if last_time is None:
+        return False
+    return datetime.utcnow() - last_time < timedelta(minutes=silence_minutes)
+
+
+def record_alert_sent(repo_name: str) -> None:
+    _last_alert_times[repo_name] = datetime.utcnow()
+
+
+def send_dingtalk_alert(
+    webhook_url: str,
+    violations: list,
+    repo_name: str,
+    silence_minutes: int = 60,
+) -> bool:
     if not webhook_url:
+        return False
+
+    if is_silenced(repo_name, silence_minutes):
+        logger.info(
+            f"DingTalk alert silenced for {repo_name} "
+            f"(last sent within {silence_minutes}min window)"
+        )
         return False
 
     by_rule: dict[str, int] = {}
@@ -37,6 +65,7 @@ def send_dingtalk_alert(webhook_url: str, violations: list, repo_name: str) -> b
     try:
         resp = httpx.post(webhook_url, json=payload, timeout=10)
         if resp.status_code == 200:
+            record_alert_sent(repo_name)
             logger.info(f"DingTalk alert sent for {repo_name}: {len(violations)} violations")
             return True
         else:

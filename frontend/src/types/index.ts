@@ -75,6 +75,7 @@ export interface CommitFrequency {
 export interface CollaborationNode {
   id: string;
   commit_count: number;
+  is_cluster?: boolean;
 }
 
 export interface CollaborationEdge {

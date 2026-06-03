@@ -20,9 +20,10 @@ export default function CollaborationNetwork({ data }: Props) {
       ...data.nodes.map(node => ({
         data: {
           id: node.id,
-          label: node.id,
+          label: node.id.length > 16 ? node.id.slice(0, 14) + '...' : node.id,
           commit_count: node.commit_count,
           size: 30 + (node.commit_count / maxCommits) * 60,
+          isCluster: (node as any).is_cluster || false,
         },
       })),
       ...data.edges.map((edge, i) => ({
@@ -52,10 +53,21 @@ export default function CollaborationNetwork({ data }: Props) {
             'label': 'data(label)',
             'width': 'data(size)',
             'height': 'data(size)',
-            'font-size': '11px',
+            'font-size': '10px',
             'text-valign': 'bottom',
             'text-margin-y': 5,
             'color': '#333',
+            'text-wrap': 'ellipsis',
+            'text-max-width': '80px',
+          },
+        },
+        {
+          selector: 'node[?isCluster]',
+          style: {
+            'background-color': '#95A5A6',
+            'shape': 'diamond',
+            'border-width': 2,
+            'border-color': '#7F8C8D',
           },
         },
         {
@@ -67,12 +79,6 @@ export default function CollaborationNetwork({ data }: Props) {
             'opacity': 0.6,
           },
         },
-        {
-          selector: 'node:hover',
-          style: {
-            'background-color': '#E74C3C',
-          },
-        },
       ],
       layout: {
         name: 'cose',
@@ -82,16 +88,21 @@ export default function CollaborationNetwork({ data }: Props) {
         idealEdgeLength: () => 120,
         gravity: 0.3,
       } as cytoscape.CoseLayoutOptions,
+      minZoom: 0.3,
+      maxZoom: 3,
+      wheelSensitivity: 0.3,
     });
 
     cy.on('mouseover', 'node', (event) => {
       const node = event.target;
-      node.style('background-color', '#E74C3C');
+      const isCluster = node.data('isCluster');
+      node.style('background-color', isCluster ? '#E67E22' : '#E74C3C');
     });
 
     cy.on('mouseout', 'node', (event) => {
       const node = event.target;
-      node.style('background-color', '#4A90D9');
+      const isCluster = node.data('isCluster');
+      node.style('background-color', isCluster ? '#95A5A6' : '#4A90D9');
     });
 
     cyRef.current = cy;
@@ -112,6 +123,8 @@ export default function CollaborationNetwork({ data }: Props) {
     );
   }
 
+  const clusterNode = data.nodes.find((n: any) => n.is_cluster);
+
   return (
     <div style={{ position: 'relative' }}>
       <div
@@ -124,9 +137,15 @@ export default function CollaborationNetwork({ data }: Props) {
           background: '#fafafa',
         }}
       />
-      <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-        Nodes: {data.nodes.length} developers | Edges: {data.edges.length} collaborations
-        (node size = commit count, edge thickness = shared files)
+      <div style={{ marginTop: 8, fontSize: 12, color: '#666', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <span>Nodes: {data.nodes.length} developers</span>
+        <span>Edges: {data.edges.length} collaborations</span>
+        <span>(node size = commit count, edge thickness = shared files)</span>
+        {clusterNode && (
+          <span style={{ color: '#95A5A6' }}>
+            Diamond node = collapsed minor contributors
+          </span>
+        )}
       </div>
     </div>
   );

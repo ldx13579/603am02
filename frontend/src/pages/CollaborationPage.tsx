@@ -7,6 +7,7 @@ import type { CollaborationGraph, Repo } from '../types';
 export default function CollaborationPage() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<number | null>(null);
+  const [maxNodes, setMaxNodes] = useState(50);
   const [graph, setGraph] = useState<CollaborationGraph | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,20 +20,20 @@ export default function CollaborationPage() {
     if (!selectedRepo) return;
     setLoading(true);
     setError(null);
-    getCollaborationGraph(selectedRepo)
+    getCollaborationGraph(selectedRepo, maxNodes)
       .then(setGraph)
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load graph');
         setGraph(null);
       })
       .finally(() => setLoading(false));
-  }, [selectedRepo]);
+  }, [selectedRepo, maxNodes]);
 
   return (
     <div className="collaboration-page">
       <div className="report-header">
         <h1>Developer Collaboration Network</h1>
-        <div className="report-meta">
+        <div className="report-meta" style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             value={selectedRepo ?? ''}
             onChange={(e) => setSelectedRepo(e.target.value ? parseInt(e.target.value) : null)}
@@ -50,6 +51,19 @@ export default function CollaborationPage() {
               </option>
             ))}
           </select>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 13, color: '#666' }}>Max nodes:</label>
+            <input
+              type="range"
+              min={5}
+              max={100}
+              value={maxNodes}
+              onChange={(e) => setMaxNodes(parseInt(e.target.value))}
+              style={{ width: 100 }}
+            />
+            <span style={{ fontSize: 13, minWidth: 24 }}>{maxNodes}</span>
+          </div>
         </div>
       </div>
 

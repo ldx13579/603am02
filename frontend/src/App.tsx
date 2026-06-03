@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard';
 import RepoManagement from './pages/RepoManagement';
 import ReportDetail from './pages/ReportDetail';
 import CollaborationPage from './pages/CollaborationPage';
+import RuleConfigPage from './pages/RuleConfigPage';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
             <NavLink to="/" end>Dashboard</NavLink>
             <NavLink to="/repos">Repositories</NavLink>
             <NavLink to="/collaboration">Collaboration</NavLink>
+            <NavLink to="/rules">Rules</NavLink>
           </nav>
         </aside>
         <main className="main-content">
@@ -24,6 +26,7 @@ export default function App() {
             <Route path="/repos" element={<RepoManagement />} />
             <Route path="/repos/:repoId" element={<ReportDetail />} />
             <Route path="/collaboration" element={<CollaborationPage />} />
+            <Route path="/rules" element={<RuleConfigPage />} />
           </Routes>
         </main>
       </div>

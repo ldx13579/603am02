@@ -40,7 +40,10 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
         until_dt = datetime.fromisoformat(until) if until else None
 
         def on_progress(current: int, total: int):
-            self.update_state(state="PROGRESS", meta={"current": current, "total": total})
+            self.update_state(state="PROGRESS", meta={
+                "current": current, "total": total,
+                "step": "scanning_commits", "step_label": "Scanning commits",
+            })
 
         try:
             commits = analyze_repo(
@@ -101,6 +104,10 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
             ))
 
         # Compute collaboration graph
+        self.update_state(state="PROGRESS", meta={
+            "current": len(commits), "total": len(commits),
+            "step": "collaboration", "step_label": "Building collaboration network",
+        })
         import json
         from app.services.collaboration import compute_collaboration_graph
         db.query(CollaborationEdge).filter(CollaborationEdge.repo_id == repo_id).delete()
@@ -115,6 +122,10 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
             ))
 
         # Rule engine: detect violations
+        self.update_state(state="PROGRESS", meta={
+            "current": len(commits), "total": len(commits),
+            "step": "rule_engine", "step_label": "Running rule engine",
+        })
         from app.services.rule_engine import create_default_engine
         settings = get_settings()
         if settings.RULE_ENABLED:
@@ -135,7 +146,12 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
             if violations and settings.DINGTALK_WEBHOOK_URL:
                 from app.services.dingtalk import send_dingtalk_alert
                 try:
-                    send_dingtalk_alert(settings.DINGTALK_WEBHOOK_URL, violations, repo.name)
+                    send_dingtalk_alert(
+                        settings.DINGTALK_WEBHOOK_URL,
+                        violations,
+                        repo.name,
+                        silence_minutes=settings.DINGTALK_SILENCE_MINUTES,
+                    )
                 except Exception as e:
                     logger.warning(f"DingTalk alert failed: {e}")
 

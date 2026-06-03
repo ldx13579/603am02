@@ -113,6 +113,7 @@ class CommitFrequencyResponse(BaseModel):
 class CollaborationNode(BaseModel):
     id: str
     commit_count: int
+    is_cluster: bool = False
 
 
 class CollaborationEdgeResponse(BaseModel):
@@ -144,3 +145,20 @@ class ViolationSummary(BaseModel):
     total: int
     by_rule: dict[str, int]
     violations: list[ViolationResponse]
+
+
+class RuleConfigResponse(BaseModel):
+    enabled: bool
+    max_files_per_commit: int
+    min_message_length: int
+    max_lines_changed: int
+    dingtalk_webhook_url: bool
+    dingtalk_silence_minutes: int
+
+
+class RuleConfigUpdate(BaseModel):
+    enabled: bool | None = None
+    max_files_per_commit: int | None = None
+    min_message_length: int | None = None
+    max_lines_changed: int | None = None
+    dingtalk_silence_minutes: int | None = None
