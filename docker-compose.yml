@@ -13,6 +13,22 @@ services:
       timeout: 3s
       retries: 3
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-githabits}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-githabits_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-githabits}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U githabits"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   fastapi:
     build:
       context: ./backend
@@ -21,7 +37,7 @@ services:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=sqlite:///./data/analysis.db
+      - DATABASE_URL=postgresql://githabits:githabits_pass@postgres:5432/githabits
       - REPOS_YAML_PATH=/app/repos.yaml
       - API_KEYS=${API_KEYS:-changeme-secret-key}
       - TRUSTED_PROXY_HEADERS=${TRUSTED_PROXY_HEADERS:-["X-Forwarded-For","X-Real-IP"]}
@@ -29,13 +45,16 @@ services:
       - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-60}
       - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
       - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-300}
-      - DB_BACKUP_DIR=/app/data/backups
-      - DB_BACKUP_WAIT_TIMEOUT=${DB_BACKUP_WAIT_TIMEOUT:-300}
+      - GIT_CLONE_DIR=/app/cloned_repos
+      - SCAN_TIMEOUT_SECONDS=${SCAN_TIMEOUT_SECONDS:-600}
+      - MAX_COMMITS=${MAX_COMMITS:-50000}
     volumes:
-      - backend_data:/app/data
+      - clone_data:/app/cloned_repos
       - ${REPOS_MOUNT_PATH:-./backend/repos.yaml.example}:/app/repos.yaml:ro
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
@@ -45,12 +64,16 @@ services:
       dockerfile: Dockerfile
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=sqlite:///./data/analysis.db
-      - DB_BACKUP_DIR=/app/data/backups
+      - DATABASE_URL=postgresql://githabits:githabits_pass@postgres:5432/githabits
+      - GIT_CLONE_DIR=/app/cloned_repos
+      - SCAN_TIMEOUT_SECONDS=${SCAN_TIMEOUT_SECONDS:-600}
+      - MAX_COMMITS=${MAX_COMMITS:-50000}
     volumes:
-      - backend_data:/app/data
+      - clone_data:/app/cloned_repos
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     command: celery -A app.tasks.celery_app:celery_app worker --loglevel=info --concurrency=2
 
@@ -60,12 +83,11 @@ services:
       dockerfile: Dockerfile
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=sqlite:///./data/analysis.db
-      - DB_BACKUP_DIR=/app/data/backups
-    volumes:
-      - backend_data:/app/data
+      - DATABASE_URL=postgresql://githabits:githabits_pass@postgres:5432/githabits
     depends_on:
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     command: celery -A app.tasks.celery_app:celery_app beat --loglevel=info
 
@@ -80,4 +102,5 @@ services:
 
 volumes:
   redis_data:
-  backend_data:
+  postgres_data:
+  clone_data:

@@ -1,22 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { getReport } from '../api/analysis';
+import { getReport, getFileExtensionStats, getKeywordStats, getCommitFrequency } from '../api/analysis';
 import CommitHeatmap from '../components/charts/CommitHeatmap';
 import DailyBarChart from '../components/charts/DailyBarChart';
 import WeeklyLineChart from '../components/charts/WeeklyLineChart';
 import CodeChurnChart from '../components/charts/CodeChurnChart';
-import type { AnalysisReport } from '../types';
+import CommitFrequencyChart from '../components/charts/CommitFrequencyChart';
+import FileModPieChart from '../components/charts/FileModPieChart';
+import KeywordRadarChart from '../components/charts/KeywordRadarChart';
+import type { AnalysisReport, CommitFrequency, FileModStat, KeywordStat } from '../types';
 
 export default function ReportDetail() {
   const { repoId } = useParams<{ repoId: string }>();
   const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [fileStats, setFileStats] = useState<FileModStat[]>([]);
+  const [keywords, setKeywords] = useState<KeywordStat[]>([]);
+  const [frequency, setFrequency] = useState<CommitFrequency[]>([]);
+  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!repoId) return;
-    loadReport(parseInt(repoId));
+    const id = parseInt(repoId);
+    loadReport(id);
+    loadExtras(id);
   }, [repoId]);
+
+  useEffect(() => {
+    if (!repoId) return;
+    getCommitFrequency(parseInt(repoId), granularity).then(setFrequency).catch(() => {});
+  }, [repoId, granularity]);
 
   const loadReport = async (id: number) => {
     try {
@@ -28,6 +42,15 @@ export default function ReportDetail() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadExtras = async (id: number) => {
+    const [files, kw] = await Promise.all([
+      getFileExtensionStats(id).catch(() => []),
+      getKeywordStats(id).catch(() => []),
+    ]);
+    setFileStats(files);
+    setKeywords(kw);
   };
 
   if (loading) return <div className="loading">Loading report...</div>;
@@ -68,6 +91,15 @@ export default function ReportDetail() {
         <CommitHeatmap data={report.daily_stats} />
       </div>
 
+      <div className="chart-section">
+        <h2>Commit Frequency</h2>
+        <CommitFrequencyChart
+          data={frequency}
+          granularity={granularity}
+          onGranularityChange={setGranularity}
+        />
+      </div>
+
       <div className="chart-row">
         <div className="chart-section half">
           <h2>Daily Commits</h2>
@@ -76,6 +108,21 @@ export default function ReportDetail() {
         <div className="chart-section half">
           <h2>Weekly Trend</h2>
           <WeeklyLineChart data={report.weekly_stats} />
+        </div>
+      </div>
+
+      <div className="chart-row">
+        <div className="chart-section half">
+          <h2>File Type Distribution</h2>
+          {fileStats.length > 0 ? (
+            <FileModPieChart data={fileStats} />
+          ) : (
+            <p style={{ color: '#999', textAlign: 'center', padding: 40 }}>No file stats data</p>
+          )}
+        </div>
+        <div className="chart-section half">
+          <h2>Keyword Analysis</h2>
+          <KeywordRadarChart data={keywords} />
         </div>
       </div>
 

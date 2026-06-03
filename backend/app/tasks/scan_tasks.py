@@ -1,13 +1,15 @@
-import shutil
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
 
+from celery.exceptions import SoftTimeLimitExceeded
+
 from app.tasks.celery_app import celery_app
 from app.config import get_settings
 from app.database import SessionLocal
-from app.models import AnalysisRun, CommitRecord, DailyStat, Repo
-from app.services.git_analyzer import analyze_repo
+from app.models import AnalysisRun, CommitRecord, DailyStat, FileModStat, Repo
+from app.services.git_analyzer import analyze_repo, compute_file_extension_stats
 from app.services.stats import compute_daily_stats
 
 
@@ -18,6 +20,9 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
         repo = db.query(Repo).filter(Repo.id == repo_id).first()
         if not repo:
             return {"repo_id": repo_id, "status": "failed", "error": "Repo not found"}
+
+        if repo.source_type == "remote" and repo.clone_status != "ready":
+            return {"repo_id": repo_id, "status": "failed", "error": "Repo not yet cloned"}
 
         run = AnalysisRun(
             repo_id=repo_id,
@@ -42,15 +47,22 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
                 until=until_dt,
                 progress_callback=on_progress,
             )
-        except (FileNotFoundError, PermissionError, Exception) as e:
+        except SoftTimeLimitExceeded:
             run.status = "failed"
-            run.error_message = str(e)
+            run.error_message = "Analysis timed out"
+            run.completed_at = datetime.utcnow()
+            db.commit()
+            return {"repo_id": repo_id, "status": "failed", "error": "Analysis timed out"}
+        except Exception as e:
+            run.status = "failed"
+            run.error_message = str(e)[:500]
             run.completed_at = datetime.utcnow()
             db.commit()
             return {"repo_id": repo_id, "status": "failed", "error": str(e)}
 
         db.query(CommitRecord).filter(CommitRecord.repo_id == repo_id).delete()
         db.query(DailyStat).filter(DailyStat.repo_id == repo_id).delete()
+        db.query(FileModStat).filter(FileModStat.repo_id == repo_id).delete()
 
         for c in commits:
             record = CommitRecord(
@@ -75,6 +87,15 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
                 total_files_changed=ds["files_changed"],
             )
             db.add(stat)
+
+        ext_stats = compute_file_extension_stats(repo.local_path, repo.branch)
+        for ext, data in ext_stats.items():
+            db.add(FileModStat(
+                repo_id=repo_id,
+                extension=ext,
+                file_count=data["file_count"],
+                modification_count=data["modification_count"],
+            ))
 
         run.status = "completed"
         run.total_commits = len(commits)
@@ -116,7 +137,7 @@ def backup_database():
 
     db = SessionLocal()
     try:
-        timeout = settings.DB_BACKUP_WAIT_TIMEOUT
+        timeout = 60
         poll_interval = 5
         elapsed = 0
 
@@ -131,31 +152,28 @@ def backup_database():
             time.sleep(poll_interval)
             elapsed += poll_interval
             db.expire_all()
-
-        if elapsed >= timeout:
-            return {
-                "status": "skipped",
-                "reason": f"Timed out waiting for {running} running tasks after {timeout}s",
-            }
     finally:
         db.close()
-
-    db_url = settings.DATABASE_URL
-    db_path = db_url.replace("sqlite:///", "")
-    source = Path(db_path)
-
-    if not source.exists():
-        return {"status": "skipped", "reason": "Database file not found"}
 
     backup_dir = Path(settings.DB_BACKUP_DIR)
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    backup_path = backup_dir / f"analysis_{timestamp}.db"
+    backup_path = backup_dir / f"githabits_{timestamp}.sql"
 
-    shutil.copy2(str(source), str(backup_path))
+    try:
+        result = subprocess.run(
+            ["pg_dump", settings.DATABASE_URL, "-f", str(backup_path)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            return {"status": "failed", "error": result.stderr[:500]}
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        return {"status": "failed", "error": str(e)[:200]}
 
-    backups = sorted(backup_dir.glob("analysis_*.db"), key=lambda p: p.stat().st_mtime)
+    backups = sorted(backup_dir.glob("githabits_*.sql"), key=lambda p: p.stat().st_mtime)
     keep_count = settings.DB_BACKUP_KEEP_COUNT
     if len(backups) > keep_count:
         for old_backup in backups[:-keep_count]:

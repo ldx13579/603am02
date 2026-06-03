@@ -2,6 +2,9 @@ export interface Repo {
   id: number;
   name: string;
   local_path: string;
+  git_url: string | null;
+  source_type: string;
+  clone_status: string | null;
   branch: string;
   is_active: boolean;
   created_at: string;
@@ -45,6 +48,26 @@ export interface TaskStatus {
 
 export interface RepoCreate {
   name: string;
-  local_path: string;
+  local_path?: string;
+  git_url?: string;
   branch: string;
+}
+
+export interface FileModStat {
+  extension: string;
+  file_count: number;
+  modification_count: number;
+}
+
+export interface KeywordStat {
+  keyword: string;
+  score: number;
+}
+
+export interface CommitFrequency {
+  period: string;
+  commit_count: number;
+  insertions: number;
+  deletions: number;
+  files_changed: number;
 }

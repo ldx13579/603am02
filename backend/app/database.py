@@ -7,7 +7,9 @@ settings = get_settings()
 
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,
     echo=False,
 )
 

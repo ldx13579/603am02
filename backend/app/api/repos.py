@@ -19,6 +19,30 @@ def list_repos(db: Session = Depends(get_db)):
 
 @router.post("", response_model=RepoResponse, status_code=201)
 def create_repo(data: RepoCreate, db: Session = Depends(get_db)):
+    if not data.local_path and not data.git_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Either local_path or git_url must be provided",
+        )
+
+    if data.git_url:
+        repo = Repo(
+            name=data.name,
+            local_path="",
+            git_url=data.git_url,
+            branch=data.branch,
+            source_type="remote",
+            clone_status="pending",
+        )
+        db.add(repo)
+        db.commit()
+        db.refresh(repo)
+
+        from app.tasks.clone_tasks import clone_repo
+        clone_repo.delay(repo.id)
+
+        return repo
+
     path = Path(data.local_path)
     if not path.exists():
         raise HTTPException(

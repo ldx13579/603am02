@@ -40,8 +40,14 @@ def analyze_repo(
     branch: str = "main",
     since: datetime | None = None,
     until: datetime | None = None,
+    max_commits: int | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> list[CommitInfo]:
+    from app.config import get_settings
+
+    if max_commits is None:
+        max_commits = get_settings().MAX_COMMITS
+
     repo_path = Path(repo_path)
 
     if not repo_path.exists():
@@ -73,14 +79,20 @@ def analyze_repo(
         kwargs["until"] = until.isoformat()
 
     try:
-        commits_iter = list(repo.iter_commits(rev, **kwargs))
+        commits_iter = repo.iter_commits(rev, **kwargs)
+        commits_list = []
+        for commit in commits_iter:
+            commits_list.append(commit)
+            if len(commits_list) >= max_commits:
+                logger.warning(f"Reached max_commits limit ({max_commits}) for {repo_path}")
+                break
     except GitCommandError as e:
         raise GitCommandError(e.command, e.status, stderr_value=f"Failed to iterate commits: {e}")
 
-    total = len(commits_iter)
+    total = len(commits_list)
     results: list[CommitInfo] = []
 
-    for i, commit in enumerate(commits_iter):
+    for i, commit in enumerate(commits_list):
         try:
             stats = commit.stats.total
             info = CommitInfo(
@@ -101,3 +113,51 @@ def analyze_repo(
             progress_callback(i + 1, total)
 
     return results
+
+
+def compute_file_extension_stats(
+    repo_path: str | Path,
+    branch: str = "main",
+    max_commits: int | None = None,
+) -> dict[str, dict]:
+    from collections import defaultdict
+    from app.config import get_settings
+
+    if max_commits is None:
+        max_commits = get_settings().MAX_COMMITS
+
+    repo_path = Path(repo_path)
+    try:
+        repo = git.Repo(str(repo_path))
+    except Exception:
+        return {}
+
+    try:
+        if branch in [b.name for b in repo.branches]:
+            rev = branch
+        else:
+            rev = "HEAD"
+    except Exception:
+        rev = "HEAD"
+
+    ext_files: dict[str, set] = defaultdict(set)
+    ext_mods: dict[str, int] = defaultdict(int)
+
+    try:
+        for i, commit in enumerate(repo.iter_commits(rev)):
+            if i >= max_commits:
+                break
+            try:
+                for filepath in commit.stats.files:
+                    ext = Path(filepath).suffix.lower() or "(no ext)"
+                    ext_files[ext].add(filepath)
+                    ext_mods[ext] += 1
+            except Exception:
+                continue
+    except Exception:
+        return {}
+
+    return {
+        ext: {"file_count": len(ext_files[ext]), "modification_count": ext_mods[ext]}
+        for ext in ext_mods
+    }

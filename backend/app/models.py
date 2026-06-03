@@ -13,7 +13,11 @@ class Repo(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(200), nullable=False)
-    local_path = Column(String(500), nullable=False)
+    local_path = Column(String(500), nullable=False, default="")
+    git_url = Column(String(500), nullable=True)
+    source_type = Column(String(20), default="local")
+    clone_status = Column(String(50), nullable=True)
+    clone_error = Column(Text, nullable=True)
     branch = Column(String(100), default="main")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -22,6 +26,7 @@ class Repo(Base):
     analysis_runs = relationship("AnalysisRun", back_populates="repo", cascade="all, delete-orphan")
     commit_records = relationship("CommitRecord", back_populates="repo", cascade="all, delete-orphan")
     daily_stats = relationship("DailyStat", back_populates="repo", cascade="all, delete-orphan")
+    file_mod_stats = relationship("FileModStat", back_populates="repo", cascade="all, delete-orphan")
 
 
 class AnalysisRun(Base):
@@ -68,3 +73,15 @@ class DailyStat(Base):
     total_files_changed = Column(Integer, default=0)
 
     repo = relationship("Repo", back_populates="daily_stats")
+
+
+class FileModStat(Base):
+    __tablename__ = "file_mod_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_id = Column(Integer, ForeignKey("repos.id"), nullable=False)
+    extension = Column(String(50), nullable=False)
+    file_count = Column(Integer, default=0)
+    modification_count = Column(Integer, default=0)
+
+    repo = relationship("Repo", back_populates="file_mod_stats")

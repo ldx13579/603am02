@@ -40,10 +40,12 @@ app.add_middleware(
 from app.api.repos import router as repos_router
 from app.api.analysis import router as analysis_router
 from app.api.tasks import router as tasks_router
+from app.api.stats import router as stats_router
 
 app.include_router(repos_router)
 app.include_router(analysis_router)
 app.include_router(tasks_router)
+app.include_router(stats_router)
 
 
 @app.get("/api/health", dependencies=[])

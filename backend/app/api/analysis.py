@@ -1,6 +1,7 @@
 from datetime import datetime
+from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,6 +10,7 @@ from app.models import AnalysisRun, CommitRecord, DailyStat, Repo
 from app.schemas import (
     AnalysisTriggerRequest,
     AnalysisTriggerResponse,
+    CommitFrequencyResponse,
     DailyStatResponse,
     ReportResponse,
     WeeklyStatResponse,
@@ -148,7 +150,6 @@ def get_aggregate_stats(
 
     stats = query.order_by(DailyStat.date).all()
 
-    from collections import defaultdict
     aggregated = defaultdict(lambda: {"commit_count": 0, "insertions": 0, "deletions": 0, "files_changed": 0})
 
     for s in stats:
@@ -162,3 +163,55 @@ def get_aggregate_stats(
     cache_service.set(cache_key, result)
 
     return result
+
+
+@router.get("/reports/{repo_id}/frequency", response_model=list[CommitFrequencyResponse])
+def get_commit_frequency(
+    repo_id: int,
+    granularity: str = Query(default="weekly", regex="^(daily|weekly|monthly)$"),
+    since: str | None = None,
+    until: str | None = None,
+    db: Session = Depends(get_db),
+):
+    repo = db.query(Repo).filter(Repo.id == repo_id).first()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    query = db.query(DailyStat).filter(DailyStat.repo_id == repo_id)
+    if since:
+        query = query.filter(DailyStat.date >= since)
+    if until:
+        query = query.filter(DailyStat.date <= until)
+
+    stats = query.order_by(DailyStat.date).all()
+
+    if granularity == "daily":
+        return [
+            CommitFrequencyResponse(
+                period=s.date,
+                commit_count=s.commit_count,
+                insertions=s.total_insertions,
+                deletions=s.total_deletions,
+                files_changed=s.total_files_changed,
+            )
+            for s in stats
+        ]
+
+    grouped = defaultdict(lambda: {"commit_count": 0, "insertions": 0, "deletions": 0, "files_changed": 0})
+
+    for s in stats:
+        if granularity == "weekly":
+            from datetime import date as date_type
+            d = date_type.fromisoformat(s.date)
+            key = f"{d.isocalendar()[0]}-W{d.isocalendar()[1]:02d}"
+        else:
+            key = s.date[:7]
+        grouped[key]["commit_count"] += s.commit_count
+        grouped[key]["insertions"] += s.total_insertions
+        grouped[key]["deletions"] += s.total_deletions
+        grouped[key]["files_changed"] += s.total_files_changed
+
+    return [
+        CommitFrequencyResponse(period=k, **v)
+        for k, v in sorted(grouped.items())
+    ]

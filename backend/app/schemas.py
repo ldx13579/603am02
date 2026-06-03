@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 
 class RepoCreate(BaseModel):
     name: str
-    local_path: str
+    local_path: str | None = None
+    git_url: str | None = None
     branch: str = "main"
 
 
@@ -22,6 +23,9 @@ class RepoResponse(BaseModel):
     id: int
     name: str
     local_path: str
+    git_url: str | None = None
+    source_type: str
+    clone_status: str | None = None
     branch: str
     is_active: bool
     created_at: datetime
@@ -82,3 +86,25 @@ class ReportResponse(BaseModel):
 
 class YAMLImportRequest(BaseModel):
     config_path: str | None = None
+
+
+class FileModStatResponse(BaseModel):
+    extension: str
+    file_count: int
+    modification_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class KeywordStatResponse(BaseModel):
+    keyword: str
+    score: float
+
+
+class CommitFrequencyResponse(BaseModel):
+    period: str
+    commit_count: int
+    insertions: int
+    deletions: int
+    files_changed: int

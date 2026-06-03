@@ -4,8 +4,12 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
-    DATABASE_URL: str = "sqlite:///./data/analysis.db"
+    DATABASE_URL: str = "postgresql://githabits:githabits_pass@localhost:5432/githabits"
     REPOS_YAML_PATH: str = "repos.yaml"
+
+    GIT_CLONE_DIR: str = "/app/cloned_repos"
+    SCAN_TIMEOUT_SECONDS: int = 600
+    MAX_COMMITS: int = 50000
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     API_KEYS: str = "changeme-secret-key"

@@ -18,6 +18,8 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,
     worker_prefetch_multiplier=1,
+    task_soft_time_limit=settings.SCAN_TIMEOUT_SECONDS,
+    task_time_limit=settings.SCAN_TIMEOUT_SECONDS + 60,
     beat_schedule={
         "backup-database-daily": {
             "task": "backup_database",

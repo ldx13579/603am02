@@ -6,13 +6,15 @@ import { usePolling } from '../hooks/usePolling';
 import CommitHeatmap from '../components/charts/CommitHeatmap';
 import DailyBarChart from '../components/charts/DailyBarChart';
 import WeeklyLineChart from '../components/charts/WeeklyLineChart';
-import type { DailyStat, Repo } from '../types';
+import CommitFrequencyChart from '../components/charts/CommitFrequencyChart';
+import type { CommitFrequency, DailyStat, Repo } from '../types';
 
 export default function Dashboard() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
   const navigate = useNavigate();
 
   const taskStatus = usePolling(taskId);
@@ -50,6 +52,39 @@ export default function Dashboard() {
   };
 
   const totalCommits = dailyStats.reduce((sum, d) => sum + d.commit_count, 0);
+
+  const getFrequencyData = (): CommitFrequency[] => {
+    if (granularity === 'daily') {
+      return dailyStats.map(d => ({
+        period: d.date,
+        commit_count: d.commit_count,
+        insertions: d.insertions,
+        deletions: d.deletions,
+        files_changed: d.files_changed,
+      }));
+    }
+
+    const grouped: Record<string, CommitFrequency> = {};
+    for (const d of dailyStats) {
+      let key: string;
+      if (granularity === 'weekly') {
+        const dt = new Date(d.date);
+        const year = dt.getFullYear();
+        const week = Math.ceil(((dt.getTime() - new Date(year, 0, 1).getTime()) / 86400000 + 1) / 7);
+        key = `${year}-W${String(week).padStart(2, '0')}`;
+      } else {
+        key = d.date.slice(0, 7);
+      }
+      if (!grouped[key]) {
+        grouped[key] = { period: key, commit_count: 0, insertions: 0, deletions: 0, files_changed: 0 };
+      }
+      grouped[key].commit_count += d.commit_count;
+      grouped[key].insertions += d.insertions;
+      grouped[key].deletions += d.deletions;
+      grouped[key].files_changed += d.files_changed;
+    }
+    return Object.values(grouped).sort((a, b) => a.period.localeCompare(b.period));
+  };
 
   const weeklyFromDaily = () => {
     const weeks: Record<string, number> = {};
@@ -110,6 +145,15 @@ export default function Dashboard() {
             <CommitHeatmap data={dailyStats} />
           </div>
 
+          <div className="chart-section">
+            <h2>Commit Frequency</h2>
+            <CommitFrequencyChart
+              data={getFrequencyData()}
+              granularity={granularity}
+              onGranularityChange={setGranularity}
+            />
+          </div>
+
           <div className="chart-row">
             <div className="chart-section half">
               <h2>Daily Commits (Last 30 Days)</h2>
@@ -139,7 +183,14 @@ export default function Dashboard() {
               <tr key={repo.id}>
                 <td>{repo.name}</td>
                 <td>{repo.branch}</td>
-                <td>{repo.is_active ? 'Active' : 'Inactive'}</td>
+                <td>
+                  {repo.is_active ? 'Active' : 'Inactive'}
+                  {repo.source_type === 'remote' && repo.clone_status && (
+                    <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.7 }}>
+                      ({repo.clone_status})
+                    </span>
+                  )}
+                </td>
                 <td>
                   <button
                     className="btn btn-small"
