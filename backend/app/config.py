@@ -13,8 +13,10 @@ class Settings(BaseSettings):
 
     CLONE_MAX_RETRIES: int = 3
     CLONE_RETRY_BACKOFF: int = 60
+    CLONE_RETRY_MAX_BACKOFF: int = 300
 
     STATS_CACHE_TTL_SECONDS: int = 600
+    STATS_CACHE_MAX_TTL_SECONDS: int = 3600
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     API_KEYS: str = "changeme-secret-key"

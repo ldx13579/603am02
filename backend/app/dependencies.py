@@ -155,9 +155,11 @@ class CacheService:
             return json.loads(cached)
         return None
 
-    def set(self, key: str, value, ttl: int | None = None) -> None:
+    def set(self, key: str, value, ttl: int | None = None, max_ttl: int | None = None) -> None:
         r = get_redis()
         expire = ttl or self.settings.CACHE_TTL_SECONDS
+        if max_ttl is not None:
+            expire = min(expire, max_ttl)
         r.setex(f"cache:{key}", expire, json.dumps(value))
 
     def invalidate(self, pattern: str) -> None:

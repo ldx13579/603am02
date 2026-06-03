@@ -12,6 +12,11 @@ import FileModPieChart from '../components/charts/FileModPieChart';
 import KeywordRadarChart from '../components/charts/KeywordRadarChart';
 import type { AnalysisReport, CommitFrequency, FileModStat, KeywordStat } from '../types';
 
+function dataFingerprint(report: AnalysisReport | null, fileStats: FileModStat[]): string {
+  if (!report) return '';
+  return `${report.total_commits}:${report.daily_stats.length}:${fileStats.length}`;
+}
+
 export default function ReportDetail() {
   const { repoId } = useParams<{ repoId: string }>();
   const [report, setReport] = useState<AnalysisReport | null>(null);
@@ -31,6 +36,13 @@ export default function ReportDetail() {
     loadFrequency(id, granularity);
   }, [repoId, granularity]);
 
+  const { notifyDataUpdate, intervalMs } = useAutoRefresh(loadAll, {
+    defaultIntervalMs: 30000,
+    activeIntervalMs: 5000,
+    cooldownCount: 3,
+    enabled: !!report,
+  });
+
   useEffect(() => {
     loadAll();
   }, [repoId]);
@@ -40,7 +52,9 @@ export default function ReportDetail() {
     loadFrequency(parseInt(repoId), granularity);
   }, [repoId, granularity]);
 
-  useAutoRefresh(loadAll, { intervalMs: 30000, enabled: !!report });
+  useEffect(() => {
+    notifyDataUpdate(dataFingerprint(report, fileStats));
+  }, [report, fileStats, notifyDataUpdate]);
 
   const loadReport = async (id: number) => {
     try {
@@ -83,6 +97,7 @@ export default function ReportDetail() {
           {lastUpdated && (
             <span style={{ fontSize: 12, opacity: 0.6 }}>
               Updated: {lastUpdated.toLocaleTimeString()}
+              {intervalMs < 30000 && ' (watching)'}
             </span>
           )}
         </div>

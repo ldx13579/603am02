@@ -93,7 +93,10 @@ def clone_repo(self, repo_id: int):
                     f"Retrying clone for repo {repo_id} "
                     f"(attempt {self.request.retries + 1}/{self.max_retries})"
                 )
-                backoff = settings.CLONE_RETRY_BACKOFF * (2 ** self.request.retries)
+                backoff = min(
+                    settings.CLONE_RETRY_BACKOFF * (2 ** self.request.retries),
+                    settings.CLONE_RETRY_MAX_BACKOFF,
+                )
                 raise self.retry(exc=e, countdown=backoff)
 
             repo.clone_status = "failed"

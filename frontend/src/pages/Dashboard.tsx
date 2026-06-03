@@ -44,7 +44,17 @@ export default function Dashboard() {
     }
   }, [taskStatus, loadData]);
 
-  useAutoRefresh(loadData, { intervalMs: 30000, enabled: !loading && !taskId });
+  const { notifyDataUpdate } = useAutoRefresh(loadData, {
+    defaultIntervalMs: 30000,
+    activeIntervalMs: 5000,
+    cooldownCount: 3,
+    enabled: !loading && !taskId,
+  });
+
+  useEffect(() => {
+    const fp = `${repos.length}:${dailyStats.length}:${dailyStats.reduce((s, d) => s + d.commit_count, 0)}`;
+    notifyDataUpdate(fp);
+  }, [repos, dailyStats, notifyDataUpdate]);
 
   const handleRunAnalysis = async () => {
     try {

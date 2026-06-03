@@ -34,7 +34,11 @@ def get_file_extension_stats(repo_id: int, db: Session = Depends(get_db)):
     ]
 
     settings = get_settings()
-    cache_service.set(cache_key, result, ttl=settings.STATS_CACHE_TTL_SECONDS)
+    cache_service.set(
+        cache_key, result,
+        ttl=settings.STATS_CACHE_TTL_SECONDS,
+        max_ttl=settings.STATS_CACHE_MAX_TTL_SECONDS,
+    )
     return result
 
 
@@ -77,5 +81,9 @@ def get_keyword_stats(
     result = [{"keyword": kw, "score": round(score, 4)} for kw, score in keywords]
 
     settings = get_settings()
-    cache_service.set(cache_key, result, ttl=settings.STATS_CACHE_TTL_SECONDS)
+    cache_service.set(
+        cache_key, result,
+        ttl=settings.STATS_CACHE_TTL_SECONDS,
+        max_ttl=settings.STATS_CACHE_MAX_TTL_SECONDS,
+    )
     return result
