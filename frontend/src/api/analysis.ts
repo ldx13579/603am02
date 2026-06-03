@@ -59,3 +59,15 @@ export async function getCommitFrequency(
   const { data } = await client.get(`/analysis/reports/${repoId}/frequency?${params}`);
   return data;
 }
+
+export async function downloadPdfReport(repoId: number): Promise<void> {
+  const response = await client.get(`/export/${repoId}/pdf`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `report_${repoId}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}

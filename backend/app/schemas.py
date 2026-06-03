@@ -108,3 +108,39 @@ class CommitFrequencyResponse(BaseModel):
     insertions: int
     deletions: int
     files_changed: int
+
+
+class CollaborationNode(BaseModel):
+    id: str
+    commit_count: int
+
+
+class CollaborationEdgeResponse(BaseModel):
+    source: str
+    target: str
+    weight: int
+    shared_files: list[str] = []
+
+
+class CollaborationGraphResponse(BaseModel):
+    nodes: list[CollaborationNode]
+    edges: list[CollaborationEdgeResponse]
+
+
+class ViolationResponse(BaseModel):
+    id: int
+    commit_hash: str
+    rule_name: str
+    severity: str
+    description: str | None
+    author: str | None
+    detected_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ViolationSummary(BaseModel):
+    total: int
+    by_rule: dict[str, int]
+    violations: list[ViolationResponse]

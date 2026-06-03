@@ -71,3 +71,36 @@ export interface CommitFrequency {
   deletions: number;
   files_changed: number;
 }
+
+export interface CollaborationNode {
+  id: string;
+  commit_count: number;
+}
+
+export interface CollaborationEdge {
+  source: string;
+  target: string;
+  weight: number;
+  shared_files: string[];
+}
+
+export interface CollaborationGraph {
+  nodes: CollaborationNode[];
+  edges: CollaborationEdge[];
+}
+
+export interface Violation {
+  id: number;
+  commit_hash: string;
+  rule_name: string;
+  severity: string;
+  description: string | null;
+  author: string | null;
+  detected_at: string;
+}
+
+export interface ViolationSummary {
+  total: number;
+  by_rule: Record<string, number>;
+  violations: Violation[];
+}

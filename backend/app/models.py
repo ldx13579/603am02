@@ -27,6 +27,8 @@ class Repo(Base):
     commit_records = relationship("CommitRecord", back_populates="repo", cascade="all, delete-orphan")
     daily_stats = relationship("DailyStat", back_populates="repo", cascade="all, delete-orphan")
     file_mod_stats = relationship("FileModStat", back_populates="repo", cascade="all, delete-orphan")
+    collaboration_edges = relationship("CollaborationEdge", back_populates="repo", cascade="all, delete-orphan")
+    commit_violations = relationship("CommitViolation", back_populates="repo", cascade="all, delete-orphan")
 
 
 class AnalysisRun(Base):
@@ -85,3 +87,32 @@ class FileModStat(Base):
     modification_count = Column(Integer, default=0)
 
     repo = relationship("Repo", back_populates="file_mod_stats")
+
+
+class CollaborationEdge(Base):
+    __tablename__ = "collaboration_edges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_id = Column(Integer, ForeignKey("repos.id"), nullable=False)
+    author_a = Column(String(200), nullable=False)
+    author_b = Column(String(200), nullable=False)
+    weight = Column(Integer, default=1)
+    shared_files = Column(Text, nullable=True)
+
+    repo = relationship("Repo", back_populates="collaboration_edges")
+
+
+class CommitViolation(Base):
+    __tablename__ = "commit_violations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    repo_id = Column(Integer, ForeignKey("repos.id"), nullable=False)
+    commit_hash = Column(String(8), nullable=False)
+    rule_name = Column(String(100), nullable=False)
+    severity = Column(String(20), default="warning")
+    description = Column(Text, nullable=True)
+    author = Column(String(200), nullable=True)
+    detected_at = Column(DateTime, default=datetime.utcnow)
+    notified = Column(Boolean, default=False)
+
+    repo = relationship("Repo", back_populates="commit_violations")

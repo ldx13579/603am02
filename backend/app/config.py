@@ -34,6 +34,12 @@ class Settings(BaseSettings):
 
     CACHE_TTL_SECONDS: int = 300
 
+    DINGTALK_WEBHOOK_URL: str = ""
+    RULE_ENABLED: bool = True
+    RULE_MAX_FILES_PER_COMMIT: int = 20
+    RULE_MIN_MESSAGE_LENGTH: int = 5
+    RULE_MAX_LINES_CHANGED: int = 1000
+
     @property
     def api_key_set(self) -> set[str]:
         return {k.strip() for k in self.API_KEYS.split(",") if k.strip()}

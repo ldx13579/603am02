@@ -1,3 +1,4 @@
+import logging
 import subprocess
 import time
 from datetime import datetime
@@ -5,10 +6,12 @@ from pathlib import Path
 
 from celery.exceptions import SoftTimeLimitExceeded
 
+logger = logging.getLogger(__name__)
+
 from app.tasks.celery_app import celery_app
 from app.config import get_settings
 from app.database import SessionLocal
-from app.models import AnalysisRun, CommitRecord, DailyStat, FileModStat, Repo
+from app.models import AnalysisRun, CollaborationEdge, CommitRecord, CommitViolation, DailyStat, FileModStat, Repo
 from app.services.git_analyzer import analyze_repo, compute_file_extension_stats
 from app.services.stats import compute_daily_stats
 
@@ -96,6 +99,45 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
                 file_count=data["file_count"],
                 modification_count=data["modification_count"],
             ))
+
+        # Compute collaboration graph
+        import json
+        from app.services.collaboration import compute_collaboration_graph
+        db.query(CollaborationEdge).filter(CollaborationEdge.repo_id == repo_id).delete()
+        collab_data = compute_collaboration_graph(repo.local_path, repo.branch)
+        for edge in collab_data.get("edges", []):
+            db.add(CollaborationEdge(
+                repo_id=repo_id,
+                author_a=edge["source"],
+                author_b=edge["target"],
+                weight=edge["weight"],
+                shared_files=json.dumps(edge["shared_files"]),
+            ))
+
+        # Rule engine: detect violations
+        from app.services.rule_engine import create_default_engine
+        settings = get_settings()
+        if settings.RULE_ENABLED:
+            db.query(CommitViolation).filter(CommitViolation.repo_id == repo_id).delete()
+            engine = create_default_engine(settings)
+            violations = engine.evaluate(commits)
+            for v in violations:
+                db.add(CommitViolation(
+                    repo_id=repo_id,
+                    commit_hash=v.commit_hash,
+                    rule_name=v.rule_name,
+                    severity=v.severity,
+                    description=v.description,
+                    author=v.author,
+                ))
+            db.flush()
+
+            if violations and settings.DINGTALK_WEBHOOK_URL:
+                from app.services.dingtalk import send_dingtalk_alert
+                try:
+                    send_dingtalk_alert(settings.DINGTALK_WEBHOOK_URL, violations, repo.name)
+                except Exception as e:
+                    logger.warning(f"DingTalk alert failed: {e}")
 
         run.status = "completed"
         run.total_commits = len(commits)

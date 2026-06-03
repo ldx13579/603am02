@@ -68,6 +68,11 @@ services:
       - GIT_CLONE_DIR=/app/cloned_repos
       - SCAN_TIMEOUT_SECONDS=${SCAN_TIMEOUT_SECONDS:-600}
       - MAX_COMMITS=${MAX_COMMITS:-50000}
+      - DINGTALK_WEBHOOK_URL=${DINGTALK_WEBHOOK_URL:-}
+      - RULE_ENABLED=${RULE_ENABLED:-true}
+      - RULE_MAX_FILES_PER_COMMIT=${RULE_MAX_FILES_PER_COMMIT:-20}
+      - RULE_MIN_MESSAGE_LENGTH=${RULE_MIN_MESSAGE_LENGTH:-5}
+      - RULE_MAX_LINES_CHANGED=${RULE_MAX_LINES_CHANGED:-1000}
     volumes:
       - clone_data:/app/cloned_repos
     depends_on:

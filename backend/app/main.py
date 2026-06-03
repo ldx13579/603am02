@@ -41,11 +41,17 @@ from app.api.repos import router as repos_router
 from app.api.analysis import router as analysis_router
 from app.api.tasks import router as tasks_router
 from app.api.stats import router as stats_router
+from app.api.collaboration import router as collaboration_router
+from app.api.violations import router as violations_router
+from app.api.export import router as export_router
 
 app.include_router(repos_router)
 app.include_router(analysis_router)
 app.include_router(tasks_router)
 app.include_router(stats_router)
+app.include_router(collaboration_router)
+app.include_router(violations_router)
+app.include_router(export_router)
 
 
 @app.get("/api/health", dependencies=[])

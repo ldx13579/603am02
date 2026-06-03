@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { getReport, getFileExtensionStats, getKeywordStats, getCommitFrequency } from '../api/analysis';
+import { getReport, getFileExtensionStats, getKeywordStats, getCommitFrequency, downloadPdfReport } from '../api/analysis';
+import { getViolations } from '../api/violations';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import CommitHeatmap from '../components/charts/CommitHeatmap';
 import DailyBarChart from '../components/charts/DailyBarChart';
@@ -10,7 +11,7 @@ import CommitFrequencyChart from '../components/charts/CommitFrequencyChart';
 import type { Granularity } from '../components/charts/CommitFrequencyChart';
 import FileModPieChart from '../components/charts/FileModPieChart';
 import KeywordRadarChart from '../components/charts/KeywordRadarChart';
-import type { AnalysisReport, CommitFrequency, FileModStat, KeywordStat } from '../types';
+import type { AnalysisReport, CommitFrequency, FileModStat, KeywordStat, ViolationSummary } from '../types';
 
 function dataFingerprint(report: AnalysisReport | null, fileStats: FileModStat[]): string {
   if (!report) return '';
@@ -24,6 +25,8 @@ export default function ReportDetail() {
   const [keywords, setKeywords] = useState<KeywordStat[]>([]);
   const [frequency, setFrequency] = useState<CommitFrequency[]>([]);
   const [granularity, setGranularity] = useState<Granularity>('weekly');
+  const [violations, setViolations] = useState<ViolationSummary | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -76,6 +79,7 @@ export default function ReportDetail() {
     ]);
     setFileStats(files);
     setKeywords(kw);
+    getViolations(id).then(setViolations).catch(() => {});
   };
 
   const loadFrequency = async (id: number, g: Granularity) => {
@@ -100,6 +104,31 @@ export default function ReportDetail() {
               {intervalMs < 30000 && ' (watching)'}
             </span>
           )}
+          <button
+            onClick={async () => {
+              if (!repoId) return;
+              setPdfLoading(true);
+              try {
+                await downloadPdfReport(parseInt(repoId));
+              } catch {
+                alert('Failed to download PDF');
+              } finally {
+                setPdfLoading(false);
+              }
+            }}
+            disabled={pdfLoading}
+            style={{
+              padding: '6px 16px',
+              borderRadius: 6,
+              border: '1px solid #4A90D9',
+              background: pdfLoading ? '#ccc' : '#4A90D9',
+              color: '#fff',
+              cursor: pdfLoading ? 'not-allowed' : 'pointer',
+              fontSize: 13,
+            }}
+          >
+            {pdfLoading ? 'Exporting...' : 'Export PDF'}
+          </button>
         </div>
       </div>
 
@@ -166,6 +195,62 @@ export default function ReportDetail() {
         <h2>Code Churn</h2>
         <CodeChurnChart data={report.daily_stats} />
       </div>
+
+      {violations && violations.total > 0 && (
+        <div className="chart-section">
+          <h2>Commit Violations ({violations.total})</h2>
+          <div style={{ marginBottom: 12 }}>
+            {Object.entries(violations.by_rule).map(([rule, count]) => (
+              <span
+                key={rule}
+                style={{
+                  display: 'inline-block',
+                  padding: '4px 10px',
+                  margin: '0 6px 6px 0',
+                  borderRadius: 12,
+                  background: '#FEF0EF',
+                  color: '#E74C3C',
+                  fontSize: 12,
+                }}
+              >
+                {rule}: {count}
+              </span>
+            ))}
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Hash</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Rule</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Severity</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Description</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left' }}>Author</th>
+              </tr>
+            </thead>
+            <tbody>
+              {violations.violations.slice(0, 20).map((v) => (
+                <tr key={v.id} style={{ borderBottom: '1px solid #eee' }}>
+                  <td style={{ padding: '6px 12px', fontFamily: 'monospace' }}>{v.commit_hash}</td>
+                  <td style={{ padding: '6px 12px' }}>{v.rule_name}</td>
+                  <td style={{ padding: '6px 12px' }}>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: 8,
+                      fontSize: 11,
+                      background: v.severity === 'error' ? '#E74C3C' : '#F39C12',
+                      color: '#fff',
+                    }}>
+                      {v.severity}
+                    </span>
+                  </td>
+                  <td style={{ padding: '6px 12px' }}>{v.description}</td>
+                  <td style={{ padding: '6px 12px' }}>{v.author}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
