@@ -8,6 +8,17 @@ class Settings(BaseSettings):
     REPOS_YAML_PATH: str = "repos.yaml"
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    API_KEY: str = "changeme-secret-key"
+    API_KEY_HEADER: str = "X-API-Key"
+
+    RATE_LIMIT_REQUESTS: int = 60
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    DB_BACKUP_DIR: str = "./data/backups"
+    DB_BACKUP_KEEP_COUNT: int = 7
+
+    CACHE_TTL_SECONDS: int = 300
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

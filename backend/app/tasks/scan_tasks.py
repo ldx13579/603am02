@@ -1,6 +1,9 @@
+import shutil
 from datetime import datetime
+from pathlib import Path
 
 from app.tasks.celery_app import celery_app
+from app.config import get_settings
 from app.database import SessionLocal
 from app.models import AnalysisRun, CommitRecord, DailyStat, Repo
 from app.services.git_analyzer import analyze_repo
@@ -81,6 +84,9 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
 
         db.commit()
 
+        from app.dependencies import cache_service
+        cache_service.invalidate("aggregate_stats:*")
+
         return {
             "repo_id": repo_id,
             "status": "completed",
@@ -101,3 +107,35 @@ def scan_all_repos(self, repo_ids: list[int], since: str | None = None, until: s
         results.append(result)
 
     return {"status": "completed", "results": results, "total": total}
+
+
+@celery_app.task(name="backup_database")
+def backup_database():
+    settings = get_settings()
+
+    db_url = settings.DATABASE_URL
+    db_path = db_url.replace("sqlite:///", "")
+    source = Path(db_path)
+
+    if not source.exists():
+        return {"status": "skipped", "reason": "Database file not found"}
+
+    backup_dir = Path(settings.DB_BACKUP_DIR)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    backup_path = backup_dir / f"analysis_{timestamp}.db"
+
+    shutil.copy2(str(source), str(backup_path))
+
+    backups = sorted(backup_dir.glob("analysis_*.db"), key=lambda p: p.stat().st_mtime)
+    keep_count = settings.DB_BACKUP_KEEP_COUNT
+    if len(backups) > keep_count:
+        for old_backup in backups[:-keep_count]:
+            old_backup.unlink()
+
+    return {
+        "status": "completed",
+        "backup_path": str(backup_path),
+        "total_backups": min(len(backups), keep_count),
+    }

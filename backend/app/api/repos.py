@@ -19,6 +19,26 @@ def list_repos(db: Session = Depends(get_db)):
 
 @router.post("", response_model=RepoResponse, status_code=201)
 def create_repo(data: RepoCreate, db: Session = Depends(get_db)):
+    path = Path(data.local_path)
+    if not path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path does not exist: {data.local_path}",
+        )
+    if not (path / ".git").exists() and not path.name.endswith(".git"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not a valid git repository: {data.local_path}",
+        )
+    try:
+        import git
+        git.Repo(str(path))
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot access git repository: {e}",
+        )
+
     repo = Repo(name=data.name, local_path=data.local_path, branch=data.branch)
     db.add(repo)
     db.commit()

@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import get_settings
 
@@ -17,4 +18,11 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "backup-database-daily": {
+            "task": "backup_database",
+            "schedule": crontab(hour=2, minute=0),
+        },
+    },
+    timezone="Asia/Shanghai",
 )

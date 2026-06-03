@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import cache_service
 from app.models import AnalysisRun, CommitRecord, DailyStat, Repo
 from app.schemas import (
     AnalysisTriggerRequest,
@@ -134,6 +135,11 @@ def get_aggregate_stats(
     until: str | None = None,
     db: Session = Depends(get_db),
 ):
+    cache_key = f"aggregate_stats:{since or 'all'}:{until or 'all'}"
+    cached = cache_service.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(DailyStat)
     if since:
         query = query.filter(DailyStat.date >= since)
@@ -151,4 +157,8 @@ def get_aggregate_stats(
         aggregated[s.date]["deletions"] += s.total_deletions
         aggregated[s.date]["files_changed"] += s.total_files_changed
 
-    return [{"date": k, **v} for k, v in sorted(aggregated.items())]
+    result = [{"date": k, **v} for k, v in sorted(aggregated.items())]
+
+    cache_service.set(cache_key, result)
+
+    return result
