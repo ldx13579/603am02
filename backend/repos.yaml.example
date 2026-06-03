@@ -1,0 +1,7 @@
+repos:
+  - name: "my-project"
+    path: "/path/to/my-project"
+    branch: "main"
+  - name: "another-project"
+    path: "/path/to/another-project"
+    branch: "develop"

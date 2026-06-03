@@ -1,0 +1,38 @@
+[project]
+name = "git-habits"
+version = "1.0.0"
+description = "Cross-repository Git commit habit analysis platform"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "celery[redis]>=5.3.0",
+    "gitpython>=3.1.40",
+    "sqlalchemy>=2.0.0",
+    "pydantic-settings>=2.1.0",
+    "pyyaml>=6.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+git-habits = "app.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
