@@ -25,23 +25,24 @@ export default function RuleConfigPage() {
         min_message_length: config.min_message_length,
         max_lines_changed: config.max_lines_changed,
         dingtalk_silence_minutes: config.dingtalk_silence_minutes,
+        collaboration_max_nodes: config.collaboration_max_nodes,
       });
       setConfig(updated);
-      setMessage('Rules saved successfully');
+      setMessage('Configuration saved successfully');
     } catch {
-      setMessage('Failed to save rules');
+      setMessage('Failed to save configuration');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="loading">Loading rule config...</div>;
-  if (!config) return <div className="error">Unable to load rule configuration</div>;
+  if (loading) return <div className="loading">Loading configuration...</div>;
+  if (!config) return <div className="error">Unable to load configuration</div>;
 
   return (
     <div className="rule-config-page">
       <div className="report-header">
-        <h1>Rule Configuration</h1>
+        <h1>System Configuration</h1>
       </div>
 
       {message && (
@@ -57,8 +58,8 @@ export default function RuleConfigPage() {
         </div>
       )}
 
-      <div className="chart-section" style={{ maxWidth: 600 }}>
-        <h2>General</h2>
+      <div className="chart-section" style={{ maxWidth: 640 }}>
+        <h2>Rule Engine</h2>
         <div style={{ marginBottom: 20 }}>
           <label style={labelStyle}>
             <input
@@ -72,8 +73,6 @@ export default function RuleConfigPage() {
           <p style={hintStyle}>Enable or disable all rule checks during analysis</p>
         </div>
 
-        <h2>Rule Thresholds</h2>
-
         <div style={fieldStyle}>
           <label style={labelStyle}>Max Files Per Commit</label>
           <input
@@ -84,7 +83,7 @@ export default function RuleConfigPage() {
             onChange={(e) => setConfig({ ...config, max_files_per_commit: parseInt(e.target.value) || 20 })}
             style={inputStyle}
           />
-          <p style={hintStyle}>Commits touching more files than this threshold will be flagged</p>
+          <p style={hintStyle}>Commits touching more files than this will be flagged as violations</p>
         </div>
 
         <div style={fieldStyle}>
@@ -101,7 +100,7 @@ export default function RuleConfigPage() {
         </div>
 
         <div style={fieldStyle}>
-          <label style={labelStyle}>Max Lines Changed</label>
+          <label style={labelStyle}>Max Lines Changed Per Commit</label>
           <input
             type="number"
             min={100}
@@ -112,6 +111,24 @@ export default function RuleConfigPage() {
             style={inputStyle}
           />
           <p style={hintStyle}>Commits with total insertions + deletions exceeding this will be flagged</p>
+        </div>
+
+        <h2>Collaboration Network</h2>
+
+        <div style={fieldStyle}>
+          <label style={labelStyle}>Max Display Nodes</label>
+          <input
+            type="number"
+            min={5}
+            max={200}
+            value={config.collaboration_max_nodes}
+            onChange={(e) => setConfig({ ...config, collaboration_max_nodes: parseInt(e.target.value) || 50 })}
+            style={inputStyle}
+          />
+          <p style={hintStyle}>
+            Maximum number of developer nodes shown in the collaboration graph.
+            Excess nodes are collapsed into a cluster to prevent rendering performance issues.
+          </p>
         </div>
 
         <h2>DingTalk Alert</h2>
@@ -130,7 +147,7 @@ export default function RuleConfigPage() {
               {config.dingtalk_webhook_url ? 'Configured' : 'Not configured'}
             </span>
           </label>
-          <p style={hintStyle}>Set DINGTALK_WEBHOOK_URL in .env to enable alerts</p>
+          <p style={hintStyle}>Set DINGTALK_WEBHOOK_URL environment variable to enable alerts</p>
         </div>
 
         <div style={fieldStyle}>
@@ -143,10 +160,13 @@ export default function RuleConfigPage() {
             onChange={(e) => setConfig({ ...config, dingtalk_silence_minutes: parseInt(e.target.value) || 60 })}
             style={inputStyle}
           />
-          <p style={hintStyle}>Same repository alerts will be suppressed within this time window (0 = no silence)</p>
+          <p style={hintStyle}>
+            Same repository will not be alerted again within this time window.
+            Set to 0 to disable silence (alert on every scan).
+          </p>
         </div>
 
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 28, display: 'flex', gap: 12 }}>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -161,6 +181,23 @@ export default function RuleConfigPage() {
             }}
           >
             {saving ? 'Saving...' : 'Save Configuration'}
+          </button>
+          <button
+            onClick={() => {
+              getRuleConfig().then(setConfig).catch(() => {});
+              setMessage(null);
+            }}
+            style={{
+              padding: '10px 24px',
+              borderRadius: 6,
+              border: '1px solid #ddd',
+              background: '#fff',
+              color: '#333',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+          >
+            Reset
           </button>
         </div>
       </div>

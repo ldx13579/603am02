@@ -7,6 +7,7 @@ export interface RuleConfig {
   max_lines_changed: number;
   dingtalk_webhook_url: boolean;
   dingtalk_silence_minutes: number;
+  collaboration_max_nodes: number;
 }
 
 export async function getRuleConfig(): Promise<RuleConfig> {

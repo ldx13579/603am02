@@ -18,6 +18,29 @@ from app.services.stats import compute_daily_stats
 
 @celery_app.task(bind=True, name="scan_single_repo", max_retries=2)
 def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | None = None):
+    # Step weights for progress calculation (must sum to 100)
+    STEP_WEIGHTS = {
+        "scanning_commits": 55,
+        "saving_records": 10,
+        "file_stats": 10,
+        "collaboration": 15,
+        "rule_engine": 10,
+    }
+
+    def report_progress(step: str, step_label: str, step_pct: float = 1.0):
+        steps_order = list(STEP_WEIGHTS.keys())
+        completed_weight = sum(
+            STEP_WEIGHTS[s] for s in steps_order[:steps_order.index(step)]
+        )
+        current_step_weight = STEP_WEIGHTS[step] * step_pct
+        overall_pct = int(completed_weight + current_step_weight)
+        self.update_state(state="PROGRESS", meta={
+            "progress": min(overall_pct, 99),
+            "step": step,
+            "step_label": step_label,
+            "step_pct": round(step_pct * 100),
+        })
+
     db = SessionLocal()
     try:
         repo = db.query(Repo).filter(Repo.id == repo_id).first()
@@ -40,10 +63,8 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
         until_dt = datetime.fromisoformat(until) if until else None
 
         def on_progress(current: int, total: int):
-            self.update_state(state="PROGRESS", meta={
-                "current": current, "total": total,
-                "step": "scanning_commits", "step_label": "Scanning commits",
-            })
+            pct = current / total if total > 0 else 0
+            report_progress("scanning_commits", "Scanning commits", pct)
 
         try:
             commits = analyze_repo(
@@ -65,6 +86,8 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
             run.completed_at = datetime.utcnow()
             db.commit()
             return {"repo_id": repo_id, "status": "failed", "error": str(e)}
+
+        report_progress("saving_records", "Saving commit records", 0.0)
 
         db.query(CommitRecord).filter(CommitRecord.repo_id == repo_id).delete()
         db.query(DailyStat).filter(DailyStat.repo_id == repo_id).delete()
@@ -94,6 +117,9 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
             )
             db.add(stat)
 
+        report_progress("saving_records", "Saving commit records", 1.0)
+
+        report_progress("file_stats", "Computing file statistics", 0.0)
         ext_stats = compute_file_extension_stats(repo.local_path, repo.branch)
         for ext, data in ext_stats.items():
             db.add(FileModStat(
@@ -102,12 +128,9 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
                 file_count=data["file_count"],
                 modification_count=data["modification_count"],
             ))
+        report_progress("file_stats", "Computing file statistics", 1.0)
 
-        # Compute collaboration graph
-        self.update_state(state="PROGRESS", meta={
-            "current": len(commits), "total": len(commits),
-            "step": "collaboration", "step_label": "Building collaboration network",
-        })
+        report_progress("collaboration", "Building collaboration network", 0.0)
         import json
         from app.services.collaboration import compute_collaboration_graph
         db.query(CollaborationEdge).filter(CollaborationEdge.repo_id == repo_id).delete()
@@ -120,12 +143,9 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
                 weight=edge["weight"],
                 shared_files=json.dumps(edge["shared_files"]),
             ))
+        report_progress("collaboration", "Building collaboration network", 1.0)
 
-        # Rule engine: detect violations
-        self.update_state(state="PROGRESS", meta={
-            "current": len(commits), "total": len(commits),
-            "step": "rule_engine", "step_label": "Running rule engine",
-        })
+        report_progress("rule_engine", "Running rule engine", 0.0)
         from app.services.rule_engine import create_default_engine
         settings = get_settings()
         if settings.RULE_ENABLED:
@@ -154,6 +174,7 @@ def scan_single_repo(self, repo_id: int, since: str | None = None, until: str | 
                     )
                 except Exception as e:
                     logger.warning(f"DingTalk alert failed: {e}")
+        report_progress("rule_engine", "Running rule engine", 1.0)
 
         run.status = "completed"
         run.total_commits = len(commits)

@@ -21,14 +21,11 @@ def get_task_status(task_id: str):
 
     if result.state == "PROGRESS":
         meta = result.info or {}
-        total = meta.get("total", 1)
-        current = meta.get("current", 0)
-        response.progress = int((current / total) * 100) if total > 0 else 0
+        response.progress = meta.get("progress", 0)
         response.result = {
             "step": meta.get("step", ""),
             "step_label": meta.get("step_label", ""),
-            "current": current,
-            "total": total,
+            "step_pct": meta.get("step_pct", 0),
         }
     elif result.state == "SUCCESS":
         response.progress = 100

@@ -154,6 +154,7 @@ class RuleConfigResponse(BaseModel):
     max_lines_changed: int
     dingtalk_webhook_url: bool
     dingtalk_silence_minutes: int
+    collaboration_max_nodes: int
 
 
 class RuleConfigUpdate(BaseModel):
@@ -162,3 +163,4 @@ class RuleConfigUpdate(BaseModel):
     min_message_length: int | None = None
     max_lines_changed: int | None = None
     dingtalk_silence_minutes: int | None = None
+    collaboration_max_nodes: int | None = None

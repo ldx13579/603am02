@@ -46,6 +46,7 @@ def get_rule_config():
         max_lines_changed=settings.RULE_MAX_LINES_CHANGED,
         dingtalk_webhook_url=bool(settings.DINGTALK_WEBHOOK_URL),
         dingtalk_silence_minutes=settings.DINGTALK_SILENCE_MINUTES,
+        collaboration_max_nodes=settings.COLLABORATION_MAX_NODES,
     )
 
 
@@ -63,6 +64,8 @@ def update_rule_config(config: RuleConfigUpdate = Body(...)):
         os.environ["RULE_MAX_LINES_CHANGED"] = str(config.max_lines_changed)
     if config.dingtalk_silence_minutes is not None:
         os.environ["DINGTALK_SILENCE_MINUTES"] = str(config.dingtalk_silence_minutes)
+    if config.collaboration_max_nodes is not None:
+        os.environ["COLLABORATION_MAX_NODES"] = str(config.collaboration_max_nodes)
 
     # Clear cached settings so next call picks up env changes
     from app.config import get_settings as _get_settings
@@ -76,4 +79,5 @@ def update_rule_config(config: RuleConfigUpdate = Body(...)):
         max_lines_changed=settings.RULE_MAX_LINES_CHANGED,
         dingtalk_webhook_url=bool(settings.DINGTALK_WEBHOOK_URL),
         dingtalk_silence_minutes=settings.DINGTALK_SILENCE_MINUTES,
+        collaboration_max_nodes=settings.COLLABORATION_MAX_NODES,
     )
